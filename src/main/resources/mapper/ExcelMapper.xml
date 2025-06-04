@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sfdcupload.file.repository.FileRepository">
+
+    <select id="totalCafe" parameterType="String">
+        select count(c19.id)
+        from salesforce_ext.mig_cafe_contents sf
+        join salesforce_ext.mig_tb_c15_cprt018 c18 on sf.notification_parent  = c18.notification_parent
+        join salesforce_ext.mig_tb_c15_cprt019 c19 on c19.notification_parent = c18.notification_parent
+        where is_mig = false
+    </select>
+
+    <select id="findCafe" parameterType="String">
+        select sf.sfid, c18.notification_parent, c19.bbs_attach_file_name, c19.append_file, c19.id
+        from salesforce_ext.mig_cafe_contents sf
+        join salesforce_ext.mig_tb_c15_cprt018 c18 on sf.notification_parent  = c18.notification_parent
+        join salesforce_ext.mig_tb_c15_cprt019 c19 on c19.notification_parent = c18.notification_parent
+        where is_mig = false
+        order by sf.sfid asc
+        limit 10
+    </select>
+
+    <update id="updateCafe" parameterType="java.util.Map">
+        UPDATE salesforce_ext.mig_tb_c15_cprt019
+        SET is_mig =
+        <foreach item="cafe" index="index" collection="listCafe" separator=" " open="CASE id" close="END">
+            WHEN #{cafe.id} THEN #{cafe.isMig}
+        </foreach>
+        WHERE id IN
+        <foreach item="cafe" index="index" collection="listCafe" separator="," open="(" close=")">
+            #{cafe.id}
+        </foreach>
+    </update>
+
+    <select id="totalExport" parameterType="String">
+        select count(ex2.seq_id)
+        from salesforce_ext.mig_export_cert_issue_info m
+        join salesforce_ext.mig_tb_c80_excr010 ex on m.sys_mig_key = ex.xedi_issue_number || '_' || ex.seq || '_' || ex.bill_to_code
+        join salesforce_ext.mig_tb_c80_excr011 ex2 on ex2.xedi_issue_number || '_' || ex2.seq || '_' || ex2.bill_to_code = ex.xedi_issue_number || '_' || ex.seq || '_' || ex.bill_to_code
+        where ex2.is_mig = false
+    </select>
+
+    <select id="findExport" parameterType="String">
+        select m.sfid, ex2.bbs_attach_file_name, ex2.append_file, ex2.seq_id
+        from salesforce_ext.mig_export_cert_issue_info m
+        join salesforce_ext.mig_tb_c80_excr010 ex on m.sys_mig_key = ex.xedi_issue_number || '_' || ex.seq || '_' || ex.bill_to_code
+        join salesforce_ext.mig_tb_c80_excr011 ex2 on ex2.xedi_issue_number || '_' || ex2.seq || '_' || ex2.bill_to_code = ex.xedi_issue_number || '_' || ex.seq || '_' || ex.bill_to_code
+        where ex2.is_mig = false
+        order by sfid asc
+        limit 10
+    </select>
+
+    <update id="updateExport" parameterType="java.util.Map">
+        UPDATE salesforce_ext.mig_tb_c80_excr011
+        SET is_mig =
+        <foreach item="cert" index="index" collection="listCert" separator=" " open="CASE seq_id" close="END">
+            WHEN #{cert.seqId} THEN #{cert.isMig}
+        </foreach>
+        WHERE seq_id IN
+        <foreach item="cert" index="index" collection="listCert" separator="," open="(" close=")">
+            #{cert.seqId}
+        </foreach>
+    </update>
+
+    <select id="totalClaim" parameterType="String">
+        select count(mc.seq)
+        from salesforce_ext.mig_claim_files mc
+        join salesforce_ext.tb_c70_clam060 hc on mc.claim_number||'_'||mc.seq = hc.id
+        where is_mig = false
+    </select>
+
+    <select id="findClaim" parameterType="String">
+        select mc.sfid, hc.appnd_file_path as bbs_attach_file_name, hc.append_file, hc.id
+        from salesforce_ext.mig_claim_files mc
+        join salesforce_ext.tb_c70_clam060 hc on mc.claim_number||'_'||mc.seq = hc.id
+        where is_mig = false
+        order by mc.sfid asc
+        limit 15
+    </select>
+
+    <update id="updateClaim" parameterType="java.util.Map">
+        UPDATE salesforce_ext.tb_c70_clam060
+        SET is_mig =
+        <foreach item="claim" index="index" collection="listClaim" separator=" " open="CASE id" close="END">
+            WHEN #{claim.id} THEN #{claim.isMig}
+        </foreach>
+        WHERE id IN
+        <foreach item="claim" index="index" collection="listClaim" separator="," open="(" close=")">
+            #{claim.id}
+        </foreach>
+    </update>
+
+</mapper>
+

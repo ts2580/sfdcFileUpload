@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>File Upload</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: sans-serif;
+            background-color: #f9f9f9;
+        }
+
+        #container {
+            height: 80vh;
+            text-align: center;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 70vw;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #result {
+            height: 45vh;
+            margin-top: 20px;
+
+            /* 스크롤 설정 */
+            max-height: 58vh;
+            overflow-y: auto;
+            text-align: left;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background: #f1f1f1;
+            font-weight: normal;
+            color: #333;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <h1>Salesforce 파일 업로드</h1>
+
+    <!-- 로그인 버튼 -->
+    <button onclick="window.location.href='/login'">로그인</button>
+
+    <!-- 업로드 버튼 -->
+    <button data-id="cafe" onclick="upload(this)">까페 업로드</button>
+
+    <button data-id="export" onclick="upload(this)">수출증명서 업로드</button>
+
+    <button data-id="claim" onclick="upload(this)">Claim 업로드</button>
+
+    <!-- 진행률 바 -->
+    <div style="margin-top: 20px; text-align: left;">
+        <div id="progress-label">진행률: 0%</div>
+        <div style="background: #ddd; border-radius: 8px; overflow: hidden; height: 20px;">
+            <div id="progress-bar" style="height: 100%; width: 0; background: #4caf50;"></div>
+        </div>
+    </div>
+
+    <!-- 진행 건수 -->
+    <div id="progress-count" style="margin-top: 5px; font-size: 14px; color: #555;">0건 / 0건</div>
+
+    <!-- 남은 시간 -->
+    <div id="eta-time" style="margin-top: 5px; font-size: 14px; color: #777;">⏳ 예상 남은 시간: 계산 중...</div>
+
+    <div id="result"></div>
+</div>
+
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const msg = params.get('message');
+    if (msg === 'token_refreshed') {
+        document.getElementById('result').innerText = '✅ 토큰이 갱신되었습니다.';
+
+        const url = new URL(window.location);
+        url.searchParams.delete('message');
+        window.history.replaceState({}, '', url);
+    }
+
+    let startTime = null;  // 전역 변수
+
+    function upload(button) {
+        startTime = new Date();  // 시작 시각 기록
+        const dataId = button.getAttribute('data-id');
+        const resultDiv = document.getElementById('result');
+        resultDiv.innerHTML = "";
+
+        const source = new EventSource(`/upload?dataId=${encodeURIComponent(dataId)}`);
+
+        source.onmessage = function(event) {
+            if (event.data.startsWith("progress:")) {
+
+                const progressPayload = event.data.split(":")[1];
+                const [percentStr, processedStr, totalStr] = progressPayload.split(",");
+
+                const percent = parseFloat(percentStr);
+                const processed = parseInt(processedStr);
+                const total = parseInt(totalStr);
+
+                updateProgressBar(percent, processed, total);
+            } else {
+                const line = document.createElement('div');
+                line.textContent = event.data;
+                resultDiv.appendChild(line);
+                resultDiv.scrollTop = resultDiv.scrollHeight;
+            }
+        };
+
+        function updateProgressBar(percent, processed, total) {
+            const bar = document.getElementById("progress-bar");
+            const label = document.getElementById("progress-label");
+            const count = document.getElementById("progress-count");
+
+            bar.style.width = percent + "%";
+            label.textContent = "진행률: " + percent.toFixed(1) + "%";
+            count.textContent = processed + "건 / " + total + "건";
+
+            // 예상 남은 시간 계산
+            if (startTime && processed > 0) {
+                const elapsedSec = (new Date() - startTime) / 1000;
+                const avgPerItem = elapsedSec / processed;
+                const remaining = total - processed;
+                const remainingSec = Math.round(avgPerItem * remaining);
+                const formatted = formatSeconds(remainingSec);
+
+                // 아래에 출력
+                const etaDiv = document.getElementById("eta-time");
+                etaDiv.textContent = "⏳ 예상 남은 시간: " + formatted;
+            }
+        }
+
+        function formatSeconds(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return m + "분 " + s + "초";
+        }
+
+        source.onerror = function(event) {
+            source.close();
+            const errorLine = document.createElement('div');
+            errorLine.textContent = '❌ 연결 종료';
+            resultDiv.appendChild(errorLine);
+        };
+    }
+
+</script>
+
+</body>
+</html>
