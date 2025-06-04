@@ -1,6 +1,5 @@
 package com.sfdcupload.file.controller;
 
-import com.sfdcupload.common.FileUtil;
 import com.sfdcupload.common.SalesforceFileUpload;
 import com.sfdcupload.file.dto.ExcelFile;
 import com.sfdcupload.file.service.FileService;
@@ -9,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;

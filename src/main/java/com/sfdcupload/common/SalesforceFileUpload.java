@@ -30,7 +30,7 @@ import java.util.*;
 @SpringBootApplication
 public class SalesforceFileUpload {
 
-    private final String myDomain = "https://posco--fulltest.sandbox.my.salesforce.com";
+    private final String myDomain = "https://yuricompany-dev-ed.develop.my.salesforce.com";
 
     public boolean uploadFileViaConnectAPI(byte[] fileByte, String fileName, String recordId, String accessToken) throws Exception {
 
