@@ -383,7 +383,7 @@ public class SalesforceFileUpload {
         for (ExcelFile excelFile : successList) {
 
             if(setSuccessContentDocument.contains(excelFile.getContentId())){
-                excelFile.setIsMig(true);
+                excelFile.setIsMig(1);
                 successRealList.add(excelFile);
             }
         }

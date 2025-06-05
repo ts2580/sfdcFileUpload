@@ -30,7 +30,7 @@ public class ExcelFile {
     private String archivedEmployeeNum;
     private LocalDateTime archivedTimestamp;
     private String archiveProgramId;
-    private Boolean isMig;
+    private Integer isMig;
     private String id;
     private Integer seqId;
     private String contentId;
