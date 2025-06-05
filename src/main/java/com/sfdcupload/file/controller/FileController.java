@@ -166,6 +166,7 @@ public class FileController {
 
                     if(!listSmallMain.isEmpty()){
                         // 10MB씩 끊어서 들어감 슈벌
+                        System.out.println("배치로 들어감");
                         for (List<ExcelFile> listSmallExcelFile : listSmallMain) {
                             List<ExcelFile> listSmallSuccess = new SalesforceFileUpload().uploadFileBatch(listSmallExcelFile, accessToken);
                             if(!listSmallSuccess.isEmpty()){
@@ -195,7 +196,7 @@ public class FileController {
                     loopCount++;
 
                     // 일단 10개씩 50번만 돌림
-                    if (loopCount > 1) break;
+                    // if (loopCount > 1) break;
                 }
 
                 emitter.send(SseEmitter.event().data("🎉 전체 완료 : 총 " + totalProcessed + "건 처리"));

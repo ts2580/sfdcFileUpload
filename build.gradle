@@ -1,21 +1,21 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.5.0'
+    id 'org.springframework.boot' version '3.4.5'
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
-group = 'com.sfdcupload'
+group = 'com.apache'
 version = '0.0.1-SNAPSHOT'
+
+configurations {
+    configureEach {
+        exclude group: 'commons-logging', module: 'commons-logging'
+    }
+}
 
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(17)
-    }
-}
-
-configurations {
-    compileOnly {
-        extendsFrom annotationProcessor
     }
 }
 
@@ -24,31 +24,29 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter'
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'
+    implementation 'org.apache.httpcomponents:httpclient:4.5.14'
+    implementation 'org.apache.httpcomponents:httpmime:4.5.14'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.17.2'
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.16.1'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-
-
-    // Jackson (JSON 처리)
-    implementation 'com.fasterxml.jackson.core:jackson-databind'
-    implementation 'com.fasterxml.jackson.core:jackson-core'
-    implementation 'com.fasterxml.jackson.core:jackson-annotations'
-
-    // Apache HttpClient (멀티파트 및 HTTP 통신)
-    implementation 'org.apache.httpcomponents:httpclient:4.5.14' // 또는 최신 버전
-    implementation 'org.apache.httpcomponents:httpmime:4.5.14'
-
     implementation 'com.googlecode.json-simple:json-simple:1.1.1'
+    implementation 'com.google.auth:google-auth-library-oauth2-http:1.23.0'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'org.apache.httpcomponents:httpclient:4.5.13'
 
-    implementation 'org.apache.ibatis:ibatis-core:3.0'
-
-    implementation 'org.mybatis:mybatis:3.5.6'
-
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.mariadb.jdbc:mariadb-java-client:3.3.3'
+
+    compileOnly 'javax.servlet:javax.servlet-api:4.0.1'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+
 
 }
 

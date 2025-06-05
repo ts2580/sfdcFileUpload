@@ -4,25 +4,21 @@
 <mapper namespace="com.sfdcupload.file.repository.FileRepository">
 
     <select id="totalCafe" parameterType="String">
-        select count(c19.id)
-        from salesforce_ext.mig_cafe_contents sf
-        join salesforce_ext.mig_tb_c15_cprt018 c18 on sf.notification_parent  = c18.notification_parent
-        join salesforce_ext.mig_tb_c15_cprt019 c19 on c19.notification_parent = c18.notification_parent
+        select count(id)
+        from mig.accountFile
         where is_mig = false
     </select>
 
     <select id="findCafe" parameterType="String">
-        select sf.sfid, c18.notification_parent, c19.bbs_attach_file_name, c19.append_file, c19.id
-        from salesforce_ext.mig_cafe_contents sf
-        join salesforce_ext.mig_tb_c15_cprt018 c18 on sf.notification_parent  = c18.notification_parent
-        join salesforce_ext.mig_tb_c15_cprt019 c19 on c19.notification_parent = c18.notification_parent
+        select id as sfid, appnd_file_path as bbs_attach_file_name, id, is_mig, append_file
+        from mig.accountFile
         where is_mig = false
-        order by sf.sfid asc
-        limit 10
+        order by length(append_file) asc
+        limit 3
     </select>
 
     <update id="updateCafe" parameterType="java.util.Map">
-        UPDATE salesforce_ext.mig_tb_c15_cprt019
+        UPDATE mig.accountFile
         SET is_mig =
         <foreach item="cafe" index="index" collection="listCafe" separator=" " open="CASE id" close="END">
             WHEN #{cafe.id} THEN #{cafe.isMig}
