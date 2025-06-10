@@ -41,13 +41,14 @@ public class FileController {
                 int loopCount = 0;
                 int updateCnt = 0;
                 List<ExcelFile> listExcelFile;
-                List<ExcelFile> listSuccessFile = new ArrayList<>();
 
                 targetCnt = fileService.totalCafe();
 
                 emitter.send(SseEmitter.event().data("progress: 0" + "," + totalProcessed + "," + targetCnt));
 
                 while (true) {
+                    List<ExcelFile> listSuccessFile = new ArrayList<>();
+
                     // isMig가 0인 애들만 찾기
                     listExcelFile = fileService.findCafe();
 
