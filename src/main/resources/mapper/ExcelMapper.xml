@@ -4,21 +4,21 @@
 <mapper namespace="com.sfdcupload.file.repository.FileRepository">
 
     <select id="totalCafe" parameterType="String">
-        select count(id)
-        from mig.accountFile
-        where is_mig = false
+        select count(af.id)
+        from mig.account_file af INNER JOIN mig.account_file_map afm ON af.account_number = afm.account_number
+        where is_mig = false ;
     </select>
 
     <select id="findCafe" parameterType="String">
-        select id as sfid, appnd_file_path as bbs_attach_file_name, id, is_mig, append_file
-        from mig.accountFile
+        select afm.sfid as sfid, appnd_file_path as bbs_attach_file_name, af.id, is_mig, append_file
+        FROM mig.account_file af INNER JOIN mig.account_file_map afm ON af.account_number = afm.account_number
         where is_mig = false
         order by length(append_file) asc
-        limit 3
+        limit 3;
     </select>
 
     <update id="updateCafe" parameterType="java.util.Map">
-        UPDATE mig.accountFile
+        UPDATE mig.account_file
         SET is_mig =
         <foreach item="cafe" index="index" collection="listCafe" separator=" " open="CASE id" close="END">
             WHEN #{cafe.id} THEN #{cafe.isMig}
