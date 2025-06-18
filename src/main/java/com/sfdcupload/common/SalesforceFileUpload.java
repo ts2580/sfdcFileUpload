@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.api.client.json.Json;
 import com.sfdcupload.file.dto.ExcelFile;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -33,70 +34,77 @@ public class SalesforceFileUpload {
     private final String myDomain = "https://yuricompany-dev-ed.develop.my.salesforce.com";
 
     public boolean uploadFileViaConnectAPI(byte[] fileByte, String fileName, String recordId, String accessToken) throws Exception {
-
-        // 대용량 파일 업로드용. 2GB 까지.
-        // 시간당 2,000 콜
-        // batch로 못보냄
-
-        // 한글 업로드시 한글 깨짐
+        // Connect API는 멀티파트로 들어가서 그냥 넣으면 한글 깨짐
         String isoFileName = new String(fileName.getBytes(StandardCharsets.UTF_8), StandardCharsets.ISO_8859_1);
+        // 파트를 나누는 부분 (헤더)
         String contentDisposition = "form-data; name=\"fileData\"; filename=\"" + isoFileName + "\"";
-
+        // 바디 생성 - 파일 - 아직 멀티파트가 아님
         ContentBody fileBody = new ByteArrayBody(fileByte, ContentType.DEFAULT_BINARY, isoFileName);
-        FormBodyPartBuilder partBuilder = FormBodyPartBuilder.create("fileData", fileBody)
-                .setField("Content-Disposition", contentDisposition);
 
+        // 멀티파트의 바디를 구성하자
+        FormBodyPartBuilder partBuilder = FormBodyPartBuilder
+                .create("fileData", fileBody)
+                .setField("content-Disposition", contentDisposition);
+
+
+        // 멀티파트 자체를 구성
         MultipartEntityBuilder builder = MultipartEntityBuilder.create();
-        builder.addTextBody("title", fileName, ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+        builder.addTextBody("title", fileName, ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8)); // 다시 UTF-8로 변환
         builder.addPart(partBuilder.build());
 
         HttpPost post = new HttpPost(myDomain + "/services/data/v63.0/connect/files/users/me");
         post.setHeader("Authorization", "Bearer " + accessToken);
         post.setEntity(builder.build());
 
-        try (CloseableHttpClient client = HttpClients.createDefault();
-             CloseableHttpResponse response = client.execute(post)) {
+        // try-with-resource : 자동으로 Try 문이 끝나면 연결 종료. 자원관리해줌
+        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            CloseableHttpResponse response = httpClient.execute(post);
 
-            HttpEntity responseEntity = response.getEntity();
+            int statusCode = response.getStatusLine().getStatusCode();
 
-            int status = response.getStatusLine().getStatusCode();
-            if (status != 201) {
-                String responseBody = EntityUtils.toString(responseEntity, StandardCharsets.UTF_8);
-                System.out.println("응답 본문: " + responseBody);
-                throw new RuntimeException("파일 업로드 실패 : " + response.getStatusLine().getReasonPhrase());
+            // Entity 받아서 문자로 바꿔줌
+            String responseBody = EntityUtils.toString(response.getEntity()); // response.getEntity()가 Input Stream을 반환
+
+            if (statusCode != 201) {
+                System.out.println("업로드 에러 :: " + responseBody);
+
+                throw new Exception("파일 업로드 실패 ! ==> " + responseBody);
             }
 
-            String responseBody = EntityUtils.toString(response.getEntity());
-            ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode rootNode = objectMapper.readTree(responseBody);
-
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode rootNode = mapper.readTree(responseBody); // 셀포의 Map<String, Object>랑 동일함
             JsonNode idNode = rootNode.get("id");
-            if (idNode == null) throw new RuntimeException("파일 업로드 응답에 'id' 필드 없음");
+
+            if (idNode == null) throw new Exception("파일 업로드 응답에 ID가 없음.");
+
+            // 세일즈포스의 ContentDocument의 Id
             String fileId = idNode.asText();
 
-            // ContentDocumentLink 연결
             HttpPost linkPost = new HttpPost(myDomain + "/services/data/v63.0/sobjects/ContentDocumentLink/");
             linkPost.setHeader("Authorization", "Bearer " + accessToken);
             linkPost.setHeader("Content-Type", "application/json");
 
+            // ContentDocumentLink 만들기 위함
             Map<String, String> mapContent = new HashMap<>();
-            mapContent.put("ContentDocumentId", fileId);
-            mapContent.put("LinkedEntityId", recordId);
-            mapContent.put("ShareType", "V");
+            mapContent.put("ContentDocumentId", fileId); // 파일 Id
+            mapContent.put("LinkedEntityId", recordId); // 연결할 레코드 Id
+            mapContent.put("ShareType", "V"); // View 권한, 수정권한은 C, 레코드의 권한 따라가는건 I
 
-            linkPost.setEntity(new StringEntity(objectMapper.writeValueAsString(mapContent)));
+            linkPost.setEntity(new StringEntity(mapContent.toString()));
 
-            try (CloseableHttpResponse linkResponse = client.execute(linkPost)) {
-                int linkStatus = linkResponse.getStatusLine().getStatusCode();
-                if (linkStatus != 201) {
-                    System.out.println("파일은 올렸지만 연결 실패 : " + linkResponse.getStatusLine().getReasonPhrase());
+            // httpClient는 재사용함
+            try (CloseableHttpResponse linkResponse = httpClient.execute(linkPost)) {
+                int linkStatusCode = linkResponse.getStatusLine().getStatusCode();
+
+                if (linkStatusCode != 201) {
+                    System.out.println("파일은 올렸지만 연결 실패 ==> " + responseBody);
+
                     return false;
                 }
-
-                // JsonNode linkNode = objectMapper.readTree(EntityUtils.toString(linkResponse.getEntity()));
-
-                return true;
             }
+
+            return true;
+
         }
     }
 
