@@ -90,14 +90,14 @@ public class SalesforceFileUpload {
             mapContent.put("LinkedEntityId", recordId); // 연결할 레코드 Id
             mapContent.put("ShareType", "V"); // View 권한, 수정권한은 C, 레코드의 권한 따라가는건 I
 
-            linkPost.setEntity(new StringEntity(mapContent.toString()));
+            linkPost.setEntity(new StringEntity(mapper.writeValueAsString(mapContent)));
 
             // httpClient는 재사용함
             try (CloseableHttpResponse linkResponse = httpClient.execute(linkPost)) {
                 int linkStatusCode = linkResponse.getStatusLine().getStatusCode();
 
                 if (linkStatusCode != 201) {
-                    System.out.println("파일은 올렸지만 연결 실패 ==> " + responseBody);
+                    System.out.println("파일은 올렸지만 연결 실패 ==> " + EntityUtils.toString(linkResponse.getEntity()));
 
                     return false;
                 }
