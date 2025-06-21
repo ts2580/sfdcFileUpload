@@ -59,7 +59,7 @@ public class FileController {
 
                     for (ExcelFile excelFile : listExcelFile) {
                         try {
-                            boolean result = new SalesforceFileUpload().uploadFileViaContentVersionAPI(
+                            boolean result = new SalesforceFileUpload().uploadFileViaConnectAPI(
                                     excelFile.getAppendFile(), excelFile.getBbsAttachFileName(), excelFile.getSfid(), accessToken
                             );
 
