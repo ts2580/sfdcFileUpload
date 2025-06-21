@@ -92,6 +92,7 @@ public class SalesforceFileUpload {
             mapContent.put("LinkedEntityId", recordId); // 연결할 레코드 Id
             mapContent.put("ShareType", "V"); // View 권한, 수정권한은 C, 레코드의 권한 따라가는건 I
 
+
             // Request Body 생성하기
             RequestBody jsonRequestBody = generateRequestBody(mapContent, mapper);
 
