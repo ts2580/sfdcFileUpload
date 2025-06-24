@@ -120,8 +120,8 @@ public class SalesforceFileUpload {
         }
     }
 
-    private RequestBody generateRequestBody(Map<String, String> mapContent, ObjectMapper mapper) throws JsonProcessingException {
-        String jsonBody = mapper.writeValueAsString(mapContent);
+    private RequestBody generateRequestBody(Object object, ObjectMapper mapper) throws JsonProcessingException {
+        String jsonBody = mapper.writeValueAsString(object);
         return RequestBody.create(jsonBody, MediaType.parse("application/json"));
     }
 
@@ -131,8 +131,7 @@ public class SalesforceFileUpload {
         // 50MB 까지. 근데 base64로 인코딩 해야함
         // 인코딩 시 용량이 33% 늘어남. 대략 원본 용량 35MB 까지 가능
         // 제한사항도 동일
-        // batch로 보냉 수 있...나?
-
+        // batch로 보낼 수 있...나?
 
         OkHttpClient client = new OkHttpClient();
         ObjectMapper mapper = new ObjectMapper();
