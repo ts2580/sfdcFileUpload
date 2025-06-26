@@ -5,31 +5,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.api.client.json.Json;
 import com.sfdcupload.file.dto.ExcelFile;
 import okhttp3.*;
 import okio.ByteString;
-import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.ContentType;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.entity.mime.FormBodyPartBuilder;
-import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.entity.mime.content.ByteArrayBody;
-import org.apache.http.entity.mime.content.ContentBody;
-import org.apache.http.entity.mime.content.StringBody;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @SpringBootApplication
 public class SalesforceFileUpload {
@@ -43,7 +28,12 @@ public class SalesforceFileUpload {
         // 하지만 시간당 2000 call 넘어가면 에러
 
         // OkHttp로 변경
-        OkHttpClient client = new OkHttpClient();
+        OkHttpClient client = new OkHttpClient.Builder()
+                .callTimeout(600, TimeUnit.SECONDS)       // 전체 호출 시간 제한
+                .connectTimeout(15, TimeUnit.SECONDS)     // 연결 제한
+                .writeTimeout(560, TimeUnit.SECONDS)      // 업로드(쓰기) 제한
+                .readTimeout(30, TimeUnit.SECONDS)        // 응답(읽기) 제한
+                .build();
 
         // OKHttp의 Multi Part 용 바디
         RequestBody requestBody = RequestBody.create(
@@ -71,7 +61,7 @@ public class SalesforceFileUpload {
             // Entity 받아서 문자로 바꿔줌
             String responseBody = Objects.requireNonNull(response.body()).string(); // response.getEntity()가 Input Stream을 반환
 
-            if (statusCode != 201) {
+            if (statusCode != 201 && statusCode != 200) {
                 System.out.println("업로드 에러 :: " + responseBody);
 
                 throw new Exception("파일 업로드 실패 ! ==> " + responseBody);
@@ -108,7 +98,7 @@ public class SalesforceFileUpload {
             try (Response linkResponse = client.newCall(linkRequest).execute()) {
                 int linkStatusCode = linkResponse.code();
 
-                if (linkStatusCode != 201) {
+                if (linkStatusCode != 201 && linkStatusCode != 200) {
                     System.out.println("파일은 올렸지만 연결 실패 ==> " + Objects.requireNonNull(linkResponse.body()).string());
 
                     return false;
@@ -133,7 +123,12 @@ public class SalesforceFileUpload {
         // 제한사항도 동일
         // batch로 보낼 수 있...나?
 
-        OkHttpClient client = new OkHttpClient();
+        OkHttpClient client = new OkHttpClient.Builder()
+                .callTimeout(600, TimeUnit.SECONDS)       // 전체 호출 시간 제한
+                .connectTimeout(15, TimeUnit.SECONDS)     // 연결 제한
+                .writeTimeout(560, TimeUnit.SECONDS)      // 업로드(쓰기) 제한
+                .readTimeout(30, TimeUnit.SECONDS)        // 응답(읽기) 제한
+                .build();
         ObjectMapper mapper = new ObjectMapper();
 
         String contentVersionUrl = myDomain + "/services/data/v63.0/sobjects/ContentVersion";
@@ -161,7 +156,7 @@ public class SalesforceFileUpload {
             int statusCode = response.code();
             String responseBody = Objects.requireNonNull(response.body()).string();
 
-            if (statusCode != 201) {
+            if (statusCode != 201 && statusCode != 200) {
                 throw new RuntimeException("ContentVersion 업로드 실패: " + responseBody);
             }
 
@@ -210,7 +205,7 @@ public class SalesforceFileUpload {
 
         try (Response linkResponse = client.newCall(linkRequest).execute()) {
             int linkStatus = linkResponse.code();
-            if (linkStatus != 201) {
+            if (linkStatus != 201 && linkStatus != 200) {
                 String error = Objects.requireNonNull(linkResponse.body()).string();
                 throw new RuntimeException("ContentDocumentLink 연결 실패: " + error);
             }
@@ -219,222 +214,164 @@ public class SalesforceFileUpload {
         return true;
     }
 
+    private String trimTrailingComma(StringBuilder sb) {
+        String s = sb.toString();
+        if (s.endsWith(",")) return s.substring(0, s.length() - 1);
+        return s;
+    }
+
     public List<ExcelFile> uploadFileBatch(List<ExcelFile> listExcel, String accessToken) throws IOException {
-
-        String connectBatchUrl = myDomain + "/services/data/v63.0/connect/batch";
-
-        MultipartEntityBuilder builder = MultipartEntityBuilder.create();
-
-        // Jackson으로 JSON 구성
+        OkHttpClient okHttpClient = new OkHttpClient.Builder()
+                .callTimeout(600, TimeUnit.SECONDS)       // 전체 호출 시간 제한
+                .connectTimeout(15, TimeUnit.SECONDS)     // 연결 제한
+                .writeTimeout(560, TimeUnit.SECONDS)      // 업로드(쓰기) 제한
+                .readTimeout(30, TimeUnit.SECONDS)        // 응답(읽기) 제한
+                .build();
         ObjectMapper mapper = new ObjectMapper();
 
-        ObjectNode root = mapper.createObjectNode();
+        String connectBatchUrl = myDomain + "/services/data/v63.0/connect/batch";
+        // 파일 업로드까지 성공한 List
+        List<ExcelFile> listSuccess = new ArrayList<>();
+        // ContentDocumentLink 생성 성공한 찐 성공 List
+        List<ExcelFile> listRealSuccess = new ArrayList<>();
 
-        // 에러시 멈춤
+        ObjectNode root = mapper.createObjectNode();
         root.put("haltOnError", false);
 
         ArrayNode batchRequests = root.putArray("batchRequests");
+        for (ExcelFile excelFile : listExcel) {
+            // base64를 문자열로 말아야함.
+            String base64Blob = Base64.getEncoder().encodeToString(excelFile.getAppendFile());
 
-        List<ExcelFile> successList = new ArrayList<>();                    // 파일 업로드 성공
-        List<ExcelFile> successRealList = new ArrayList<>();                // sfdc 재지정까지 성공
+            // sobjects/ContentVersiondml richInput에 들어갈 JSON
+            ObjectNode cvRequest = mapper.createObjectNode();
+            cvRequest.put("Title", excelFile.getBbsAttachFileName());
+            cvRequest.put("PathOnClient", excelFile.getBbsAttachFileName());
+            cvRequest.put("VersionData", base64Blob);
 
-        String base64Encoded;
-        StringBuilder lpvIdsBuilder = new StringBuilder();
-        for (ExcelFile file : listExcel) {
+            ObjectNode batchRequest = mapper.createObjectNode();
+            batchRequest.put("url", "/services/data/v63.0/sobjects/ContentVersion");
+            batchRequest.put("method", "POST");
+            // Body에 들어갈 데이터
+            batchRequest.put("richInput", cvRequest);
 
-            ObjectNode req = mapper.createObjectNode();
-            req.put("url", "/services/data/v63.0/sobjects/ContentVersion");
-            req.put("method", "POST");
-
-            base64Encoded = Base64.getEncoder().encodeToString(file.getAppendFile());
-
-            ObjectNode body = mapper.createObjectNode();
-
-            body.put("Title", file.getBbsAttachFileName());
-            body.put("PathOnClient", file.getBbsAttachFileName());
-            body.put("VersionData", base64Encoded);
-
-            req.set("richInput", body);
-
-            batchRequests.add(req);
+            batchRequests.add(batchRequest);
         }
 
-        String jsonBody = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+        RequestBody requestBody = generateRequestBody(root, mapper);
 
-        // multipart 구성
-        builder.addPart("json", new StringBody(jsonBody, ContentType.APPLICATION_JSON));
+        Request batchRequest = new Request.Builder()
+                .url(connectBatchUrl)
+                .addHeader("Authorization", "Bearer " + accessToken)
+                .addHeader("Content-Type", "application/json")
+                .post(requestBody)
+                .build();
 
-        HttpEntity multipart = builder.build();
+        StringBuilder cvIdsBuilder = new StringBuilder();
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        multipart.writeTo(out);
+        try (Response batchResponse = okHttpClient.newCall(batchRequest).execute()) {
 
-        // HTTP POST 실행
-        HttpPost post = new HttpPost(connectBatchUrl);
-        post.setHeader("Authorization", "Bearer " + accessToken);
-        post.setHeader("Accept", "application/json");
-        post.setEntity(multipart);
-
-        try (CloseableHttpClient client = HttpClients.createDefault(); CloseableHttpResponse response = client.execute(post)) {
-
-            HttpEntity responseEntity = response.getEntity();
-
-            int status = response.getStatusLine().getStatusCode();
-
-            if (status != 201 && status != 200) {
-                String responseBody = EntityUtils.toString(responseEntity, StandardCharsets.UTF_8);
-                System.out.println("파일 업로드 응답 본문: " + responseBody);
-                throw new RuntimeException("파일 업로드 실패 : " + response.getStatusLine().getReasonPhrase());
+            String responseBody =  Objects.requireNonNull(batchResponse.body()).string();
+            int batchStatus = batchResponse.code();
+            if (batchStatus != 201 && batchStatus != 200) {
+                System.out.println("batch 업로드 실패: " + responseBody);
+                throw new RuntimeException("batch 업로드 실패: " + responseBody);
             }
 
-            String responseBody = EntityUtils.toString(response.getEntity());
-            ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode rootNode = objectMapper.readTree(responseBody);
+            // JsonNode는 다형성을 가짐. 지금 읽어온 results는 Array임.
+            JsonNode results = mapper.readTree(responseBody).get("results");
+            for (int i = 0; i < results.size(); i++) {
 
-            JsonNode results = rootNode.get("results");
-            JsonNode result;
+                JsonNode result = results.get(i).get("result");
+                if (result.get("success").asBoolean()) {
+                    // ContentVersion Id
+                    String contentVersionId = result.get("id").asText();
+                    cvIdsBuilder.append("'").append(contentVersionId).append("',");
 
-            // 리턴값으로
-            for (int idx = 0; idx < results.size(); idx++) {
-                result = results.get(idx).get("result");
-
-                if(result.get("success").asBoolean()){
-                    lpvIdsBuilder.append("'").append(result.get("id").asText()).append("',");
-                    listExcel.get(idx).setContentId(result.get("id").asText());                     // 일단 LatestPublishedVersionId 넣어줌
-                    successList.add(listExcel.get(idx));
+                    listExcel.get(i).setContentId(contentVersionId);
+                    // 다행히 순서를 지키면서 와서 listExcel의 i번째를 가져오면 된다.
+                    listSuccess.add(listExcel.get(i));
                 }
             }
         }
 
-        String rawIdList = lpvIdsBuilder.toString();
-        if (rawIdList.endsWith(",")) {
-            rawIdList = rawIdList.substring(0, rawIdList.length() - 1);
-        }
+        // SOQL 날릴 IN 절 String으로 구성
+        String contentVersionIdSOQL = trimTrailingComma(cvIdsBuilder);
+        // Key: ContentVersion Id, Value: ContentDocument Id
+        Map<String, String> mapVersionIdToDocId = new HashMap<>();
 
-        // 주는건 LatestPublishedVersionId인데 우리에게 필요한건 ContentDocumentId다. 미쳐버리겠네
-        Map<String,String> mapPidToCId = new HashMap<>();
+        String soqlUrl = myDomain + "/services/data/v63.0/query?q=";
+        String soql = URLEncoder.encode("SELECT ContentDocumentId FROM ContentVersion WHERE Id IN (" + contentVersionIdSOQL + ")", StandardCharsets.UTF_8);
 
-        String getContentVersionUrl = myDomain + "/services/data/v63.0/query?q=" +
-                URLEncoder.encode("SELECT ContentDocumentId FROM ContentVersion WHERE Id IN (" + rawIdList + ")", StandardCharsets.UTF_8);
+        Request soqlRequest = new Request.Builder()
+                .url(soqlUrl+soql)
+                .addHeader("Authorization", "Bearer " + accessToken)
+                .build();
+        try (Response soqlResponse = okHttpClient.newCall(soqlRequest).execute()) {
+            String soqlResponseBody =  Objects.requireNonNull(soqlResponse.body()).string();
+            int soqlStatus = soqlResponse.code();
+            if (soqlStatus != 200) {
+                System.out.println("SOQL 실패:: " + soqlResponseBody);
 
-        HttpGet get = new HttpGet(getContentVersionUrl);
-        get.setHeader("Authorization", "Bearer " + accessToken);
+                throw new RuntimeException("SOQL 실패: " + soqlResponseBody);
+            }
 
-        ObjectMapper objectMapper = new ObjectMapper();
-        try (CloseableHttpClient client = HttpClients.createDefault(); CloseableHttpResponse response = client.execute(get)) {
-            String responseBody = EntityUtils.toString(response.getEntity());
+            JsonNode records = mapper.readTree(soqlResponseBody).get("records");
 
-            JsonNode rootNode = objectMapper.readTree(responseBody);
-            JsonNode results = rootNode.get("records");
+            for (JsonNode record : records) {
+                String url = record.get("attributes").get("url").asText();
+                String versionId = url.substring(url.lastIndexOf("/") + 1);
+                String documentId = record.get("ContentDocumentId").asText();
 
-            for (JsonNode result : results) {
-                String PublishedVersionIdPath = result.get("attributes").get("url").asText();
-                String PublishedVersionId = PublishedVersionIdPath.substring(PublishedVersionIdPath.lastIndexOf("/") + 1);
-                mapPidToCId.put(PublishedVersionId, result.get("ContentDocumentId").asText());
+                mapVersionIdToDocId.put(versionId, documentId);
             }
         }
 
+        ObjectNode linkRoot = mapper.createObjectNode();
+        linkRoot.put("haltOnError", false);
 
-        // content Document에 넣는것 뿐만 아니라, 레코드에 재 지정하는것도 벌크로 하기!
-        root = mapper.createObjectNode();
-
-        root.put("haltOnError", false);
-
-        batchRequests = root.putArray("batchRequests");
-
-        for (ExcelFile file : successList) {
-
-            ObjectNode req = mapper.createObjectNode();
-            req.put("url", "/services/data/v63.0/sobjects/ContentDocumentLink/");
-            req.put("method", "POST");
-
+        ArrayNode linkArrayNode = linkRoot.putArray("batchRequests");
+        for (ExcelFile success : listSuccess) {
             ObjectNode body = mapper.createObjectNode();
-
-            file.setContentId(mapPidToCId.get(file.getContentId())); // 갈아껴주자
-
-            body.put("ContentDocumentId", file.getContentId());
-            body.put("LinkedEntityId", file.getSfid());
+            body.put("ContentDocumentId", mapVersionIdToDocId.get(success.getContentId()));
+            body.put("LinkedEntityId", success.getSfid());
             body.put("ShareType", "V");
 
-            req.set("richInput", body);
+            ObjectNode linkRequest = mapper.createObjectNode();
+            linkRequest.put("url", "/services/data/v63.0/sobjects/ContentDocumentLink");
+            linkRequest.put("method", "POST");
+            linkRequest.put("richInput", body);
 
-            batchRequests.add(req);
+            linkArrayNode.add(linkRequest);
         }
 
-        jsonBody = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+        batchRequest = new Request.Builder()
+                .url(connectBatchUrl)
+                .addHeader("Authorization", "Bearer " + accessToken)
+                .addHeader("Content-Type", "application/json")
+                .post(generateRequestBody(linkRoot, mapper))
+                .build();
 
-        // HTTP POST 실행. 이번엔
-        post = new HttpPost(connectBatchUrl);
-        post.setHeader("Authorization", "Bearer " + accessToken);
-        post.setHeader("Accept", "application/json");
-        post.setEntity(new StringEntity(jsonBody, ContentType.APPLICATION_JSON));
+        try (Response response = okHttpClient.newCall(batchRequest).execute()) {
+            String linkResponseBody =  Objects.requireNonNull(response.body()).string();
+            int linkStatus = response.code();
+            if (linkStatus != 201 && linkStatus != 200) {
+                System.out.println("Link Batch 실패: " + linkResponseBody);
 
-        StringBuilder cdlBuilder = new StringBuilder();
+                throw new RuntimeException("Link Batch 실패: " + linkResponseBody);
+            }
 
-        try (CloseableHttpClient client = HttpClients.createDefault(); CloseableHttpResponse response = client.execute(post)) {
-
-            HttpEntity responseEntity = response.getEntity();
-
-            int status = response.getStatusLine().getStatusCode();
-            String responseBody = EntityUtils.toString(responseEntity, StandardCharsets.UTF_8);
-
-            if (status != 201 && status != 200) {
-                System.out.println("재지정 응답 본문: " + responseBody);
-                throw new RuntimeException("파일 레코드 지정 실패 : " + response.getStatusLine().getReasonPhrase());
-            }else{
-                JsonNode rootNode = objectMapper.readTree(responseBody);
-                JsonNode results = rootNode.get("results");
-
-                // 아니 애는 ContentDocumentLink Id를 주네.진짜 미쳐버리겠네.
-                // 파일 업로드랑 레코드 재 지정이랑 둘다 성공해야 ㄹㅇ 성공이니까 다시 모아
-                for (JsonNode result : results) {
-                    JsonNode innerResults = result.get("result");
-
-                    if(innerResults.get("success").asBoolean()){
-                        cdlBuilder.append("'").append(innerResults.get("id").asText()).append("',");
-                    }
+            JsonNode results = mapper.readTree(linkResponseBody).get("results");
+            for (int i = 0; i < results.size(); i++) {
+                JsonNode result = results.get(i).get("result");
+                if (result.get("success").asBoolean()) {
+                    listSuccess.get(i).setIsMig(1);
+                    listRealSuccess.add(listSuccess.get(i));
                 }
             }
         }
 
-        String rawIdLinkList = cdlBuilder.toString();
-        if (rawIdLinkList.endsWith(",")) {
-            rawIdLinkList = rawIdLinkList.substring(0, rawIdLinkList.length() - 1);
-        }
-
-        // 슈벌. ContentDocumentLink의 Id를 줘가지고...
-        String getContentLinkUrl = myDomain + "/services/data/v63.0/query?q=" +
-                URLEncoder.encode("SELECT Id, ContentDocumentId FROM ContentDocumentLink WHERE Id IN (" + rawIdLinkList + ") AND ShareType = 'V'", StandardCharsets.UTF_8);
-
-        get = new HttpGet(getContentLinkUrl);
-        get.setHeader("Authorization", "Bearer " + accessToken);
-
-        objectMapper = new ObjectMapper();
-        Set<String> setSuccessContentDocument = new HashSet<>();
-        try (CloseableHttpClient client = HttpClients.createDefault(); CloseableHttpResponse response = client.execute(get)) {
-            String responseBody = EntityUtils.toString(response.getEntity());
-
-            JsonNode rootNode = objectMapper.readTree(responseBody);
-
-            JsonNode records = rootNode.get("records");
-
-            // ContentDocumentLink로 검색해서 나온 ContentDocumentId를 Set에 넣어주자. 애네가 진짜 레코드 재 지정까지 성공한거니까
-            for (JsonNode record : records) {
-                setSuccessContentDocument.add(record.get("ContentDocumentId").asText());
-            }
-        }
-
-        // sfdc 파일 업로드 성공한 list(successList) 에서
-        // 레코드에 재지정 성공한것(contains으로 거르기)만 모아 successRealList에 넣는다.
-        for (ExcelFile excelFile : successList) {
-
-            if(setSuccessContentDocument.contains(excelFile.getContentId())){
-                excelFile.setIsMig(1);
-                successRealList.add(excelFile);
-            }
-        }
-
-        return successRealList;
+        return listRealSuccess;
     }
 
 }

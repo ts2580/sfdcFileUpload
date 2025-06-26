@@ -14,7 +14,7 @@
         FROM mig.account_file af INNER JOIN mig.account_file_map afm ON af.account_number = afm.account_number
         where is_mig = false
         order by length(append_file) asc
-        limit 3;
+        limit 30;
     </select>
 
     <update id="updateCafe" parameterType="java.util.Map">
