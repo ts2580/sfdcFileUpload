@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -21,6 +20,9 @@ import java.util.List;
 public class FileController {
 
     private final FileService fileService;
+    // long을 쓰는 이유: int는 크기가 너무 작음. int는 21억bit. 대략 2GB
+    final long MAX_SIZE_BYTES = 35_000_000L; // 최대 35MB
+    final long MAX_TOTAL_BATCH_SIZE = 6_000_000L; // 최대 6MB
 
     @GetMapping("/upload")
     public SseEmitter upload(@RequestParam String dataId, HttpSession session) {
@@ -40,54 +42,141 @@ public class FileController {
                 int totalProcessed = 0;
                 int loopCount = 0;
                 int updateCnt = 0;
-                List<ExcelFile> listExcelFile;
+
+                // 성공한거 담아주는 List
+                List<ExcelFile> listSuccessAll = new ArrayList<>();
+
+                // 1. Connect/files/users/userId 로 보낼 Excel List
+                List<ExcelFile> listBig = new ArrayList<>();
+                // 2. Content Version 단건으로 보낼 Excel List
+                List<ExcelFile> listMedium = new ArrayList<>();
+                // 3. Connect/batch (다건) 로 보낼 다차원 배치 List
+                List<List<ExcelFile>> listSmallPrime = new ArrayList<>();
+                List<ExcelFile> listSmall;
 
                 targetCnt = fileService.totalCafe();
 
                 emitter.send(SseEmitter.event().data("progress: 0" + "," + totalProcessed + "," + targetCnt));
 
                 while (true) {
-                    List<ExcelFile> listSuccessFile = new ArrayList<>();
+                    listSmall = new ArrayList<>();
 
                     // isMig가 0인 애들만 찾기
-                    listExcelFile = fileService.findCafe();
+                    List<ExcelFile> listExcelFile = fileService.findCafe();
 
                     if (listExcelFile.isEmpty()) {
                         emitter.send(SseEmitter.event().data("✅ 더 이상 처리할 항목이 없습니다"));
                         break;
                     }
 
+                    long currentBatchSize = 0;
+
                     for (ExcelFile excelFile : listExcelFile) {
-                        try {
-                            boolean result = new SalesforceFileUpload().uploadFileViaContentVersionAPI(
-                                    excelFile.getAppendFile(), excelFile.getBbsAttachFileName(), excelFile.getSfid(), accessToken
-                            );
+                        // 현재 들어온 파일 사이즈
+                        long fileSize = excelFile.getAppendFile().length;
 
-                            if (result) {
-                                excelFile.setIsMig(1);
-                                // 성공한 것만 담아주기
-                                listSuccessFile.add(excelFile);
-
-                                emitter.send(SseEmitter.event().data("✅ ContentVersionAPI 단건 업로드 성공, id : " + excelFile.getSfid() + ", 파일명 : " + excelFile.getBbsAttachFileName()));
+                        if (fileSize > MAX_SIZE_BYTES) { // [1]
+                            listBig.add(excelFile);
+                        } else if (fileSize > MAX_TOTAL_BATCH_SIZE) { // [2]
+                            listMedium.add(excelFile);
+                        } else { // [3]
+                            if (currentBatchSize + fileSize < MAX_TOTAL_BATCH_SIZE && listSmall.size() < 25) {
+                                listSmall.add(excelFile);
+                                currentBatchSize += fileSize;
                             } else {
-                                emitter.send(SseEmitter.event().data("❌ 업로드 실패, id : " + excelFile.getSfid()));
+                                // 깊은 복사
+                                listSmallPrime.add(new ArrayList<>(listSmall));
+                                listSmall.clear();
+                                // Clear 된 listSmall 에 else 들어온 excelFile 담아준다. 여기서 안넣어주면 안들어가잖아
+                                listSmall.add(excelFile);
+                                // 들어온 대상 파일사이즈. 0아님
+                                currentBatchSize = fileSize;
                             }
-                        } catch (Exception e) {
-                            emitter.send(SseEmitter.event().data("❌ 오류 : " + e.getMessage()));
                         }
                     }
 
-                    if (!listSuccessFile.isEmpty()) {
-                        updateCnt = fileService.updateCafe(listSuccessFile);
+                    // 배치 사이즈가 25 여서 6/6/6/6/1 일 경우 남은 1을 담은 List<ExcelFile>을 넣어준다.
+                    if (!listSmall.isEmpty()) {
+                        listSmallPrime.add(new ArrayList<>(listSmall));
+                    }
+
+                    if (!listBig.isEmpty()) {
+                        try {
+                            for (ExcelFile excelFile : listBig) {
+                                boolean result = new SalesforceFileUpload().uploadFileViaConnectAPI(
+                                    excelFile.getAppendFile(), excelFile.getBbsAttachFileName(), excelFile.getSfid(), accessToken
+                                );
+
+                                if (result) {
+                                    excelFile.setIsMig(1);
+                                    listSuccessAll.add(excelFile);
+                                    emitter.send(SseEmitter.event().data("✅ Connect Upload 성공, sfid :: " + excelFile.getSfid()));
+                                } else {
+                                    emitter.send(SseEmitter.event().data("‼️Connect Upload 실패!!"));
+                                }
+                            }
+                        } catch (Exception e) {
+                            emitter.send(SseEmitter.event().data("❌ 오류 :: " + e.getMessage()));
+                        }
+                    }
+
+                    if (!listMedium.isEmpty()) {
+                        try {
+                            for (ExcelFile excelFile : listMedium) {
+                                boolean result = new SalesforceFileUpload().uploadFileViaContentVersionAPI(
+                                        excelFile.getAppendFile(), excelFile.getBbsAttachFileName(), excelFile.getSfid(), accessToken
+                                );
+
+                                if (result) {
+                                    excelFile.setIsMig(1);
+                                    listSuccessAll.add(excelFile);
+                                    emitter.send(SseEmitter.event().data("✅ ContentVersionAPI 단건 성공, sfid :: " + excelFile.getSfid()));
+                                } else {
+                                    emitter.send(SseEmitter.event().data("❌ ContentVersionAPI 실패!!"));
+                                }
+                            }
+                        } catch (Exception e) {
+                            emitter.send(SseEmitter.event().data("❌ 오류 :: " + e.getMessage()));
+                        }
+                    }
+
+                    if (!listSmallPrime.isEmpty()) {
+                        for (List<ExcelFile> excelFiles : listSmallPrime) {
+                            try {
+                                List<ExcelFile> listSuccess = new SalesforceFileUpload().uploadFileBatch(
+                                        excelFiles, accessToken
+                                );
+
+                                if (!listSuccess.isEmpty()) {
+                                    // 성공한 것만 담아주기
+                                    listSuccessAll.addAll(listSuccess);
+
+                                    emitter.send(SseEmitter.event().data("✅ ContentVersionAPI Batch " + listSuccess.size() + "건 성공 "));
+                                } else {
+                                    emitter.send(SseEmitter.event().data("❌ Batch 실패"));
+                                }
+                            } catch (Exception e) {
+                                emitter.send(SseEmitter.event().data("❌ 오류 : " + e.getMessage()));
+                            }
+                        }
+                    }
+
+
+                    if (!listSuccessAll.isEmpty()) {
+                        updateCnt = fileService.updateCafe(listSuccessAll);
                         totalProcessed += updateCnt;
                         emitter.send(SseEmitter.event().data("✔ " + updateCnt + "건 DB 반영 완료"));
 
                         double percent = (totalProcessed * 100.0) / targetCnt;
                         emitter.send(SseEmitter.event().data("progress:" + percent + "," + totalProcessed + "," + targetCnt));
                     }
+
+//                    loopCount++;
+//                    if (loopCount > 0) break;
                 }
 
                 emitter.send(SseEmitter.event().data("🎉 전체 완료 : 총 " + totalProcessed + "건 처리"));
+
 
             } catch (Exception e){
 

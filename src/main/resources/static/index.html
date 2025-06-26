@@ -119,6 +119,15 @@
                 line.textContent = event.data;
                 resultDiv.appendChild(line);
                 resultDiv.scrollTop = resultDiv.scrollHeight;
+
+                if (event.data.includes("✅ 더 이상 처리할 항목이 없습니다")) {
+                    const endTime = new Date();
+                    const totalSeconds = Math.round((endTime - startTime) / 1000);
+                    const formatted = formatSeconds(totalSeconds);
+                    const timeDiv = document.createElement('div');
+                    timeDiv.textContent = `⏱ 총 소요 시간: ${formatted}`;
+                    resultDiv.appendChild(timeDiv);
+                }
             }
         };
 
@@ -146,9 +155,14 @@
         }
 
         function formatSeconds(seconds) {
-            const m = Math.floor(seconds / 60);
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
             const s = seconds % 60;
-            return m + "분 " + s + "초";
+            // 두 자리 수로 맞추기 위해 padStart 사용
+            const hh = String(h).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            const ss = String(s).padStart(2, '0');
+            return `${hh}:${mm}:${ss}`;
         }
 
         source.onerror = function(event) {
