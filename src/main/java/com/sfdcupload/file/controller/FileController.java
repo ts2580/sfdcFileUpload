@@ -43,23 +43,11 @@ public class FileController {
                 int loopCount = 0;
                 int updateCnt = 0;
 
-                // 성공한거 담아주는 List
-                List<ExcelFile> listSuccessAll = new ArrayList<>();
-
-                // 1. Connect/files/users/userId 로 보낼 Excel List
-                List<ExcelFile> listBig = new ArrayList<>();
-                // 2. Content Version 단건으로 보낼 Excel List
-                List<ExcelFile> listMedium = new ArrayList<>();
-                // 3. Connect/batch (다건) 로 보낼 다차원 배치 List
-                List<List<ExcelFile>> listSmallPrime = new ArrayList<>();
-                List<ExcelFile> listSmall;
-
                 targetCnt = fileService.totalCafe();
 
                 emitter.send(SseEmitter.event().data("progress: 0" + "," + totalProcessed + "," + targetCnt));
 
                 while (true) {
-                    listSmall = new ArrayList<>();
 
                     // isMig가 0인 애들만 찾기
                     List<ExcelFile> listExcelFile = fileService.findCafe();
@@ -68,6 +56,17 @@ public class FileController {
                         emitter.send(SseEmitter.event().data("✅ 더 이상 처리할 항목이 없습니다"));
                         break;
                     }
+
+                    // 성공한거 담아주는 List
+                    List<ExcelFile> listSuccessAll = new ArrayList<>();
+
+                    // 1. Connect/files/users/userId 로 보낼 Excel List
+                    List<ExcelFile> listBig = new ArrayList<>();
+                    // 2. Content Version 단건으로 보낼 Excel List
+                    List<ExcelFile> listMedium = new ArrayList<>();
+                    // 3. Connect/batch (다건) 로 보낼 다차원 배치 List
+                    List<List<ExcelFile>> listSmallPrime = new ArrayList<>();
+                    List<ExcelFile> listSmall = new ArrayList<>();
 
                     long currentBatchSize = 0;
 
