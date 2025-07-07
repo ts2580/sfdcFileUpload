@@ -83,8 +83,14 @@ public class FileController {
                                 listSmall.add(excelFile);
                                 currentBatchSize += fileSize;
                             } else {
-                                // 깊은 복사
-                                listSmallPrime.add(new ArrayList<>(listSmall));
+                                if (listSmall.size() == 1) {
+                                    // 단 1건이면 굳이 배치로 보내지 말고 ContentVersion 단건으로 넘기자
+                                    listMedium.add(listSmall.get(0));
+                                } else if (!listSmall.isEmpty()) {
+                                    // 깊은 복사
+                                    listSmallPrime.add(new ArrayList<>(listSmall));
+                                }
+
                                 listSmall.clear();
                                 // Clear 된 listSmall 에 else 들어온 excelFile 담아준다. 여기서 안넣어주면 안들어가잖아
                                 listSmall.add(excelFile);
@@ -96,7 +102,11 @@ public class FileController {
 
                     // 배치 사이즈가 25 여서 6/6/6/6/1 일 경우 남은 1을 담은 List<ExcelFile>을 넣어준다.
                     if (!listSmall.isEmpty()) {
-                        listSmallPrime.add(new ArrayList<>(listSmall));
+                        if (listSmall.size() == 1) {
+                            listMedium.add(listSmall.get(0));
+                        } else {
+                            listSmallPrime.add(new ArrayList<>(listSmall));
+                        }
                     }
 
                     if (!listBig.isEmpty()) {
