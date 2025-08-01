@@ -58,6 +58,10 @@
 
 <div id="container">
     <h1>Salesforce 파일 업로드</h1>
+    
+    <!-- 업로드 사이클 버튼 -->
+    <label for="cycle-count" style="font-size: 14px; color:#333;">업로드 사이클 수</label>
+    <input type="number" id="cycle-count" value="1" min="1" style="width: 60px; padding: 4px; font-size: 14px; text-algin: center;" >
 
     <!-- 로그인 버튼 -->
     <button onclick="window.location.href='/login'">로그인</button>
@@ -98,10 +102,11 @@
     function upload(button) {
         startTime = new Date();  // 시작 시각 기록
         const dataId = button.getAttribute('data-id');
+	const cycleCount = parseInt(document.getElementById("cycle-count").value || "1");
         const resultDiv = document.getElementById('result');
         resultDiv.innerHTML = "";
 
-        const source = new EventSource(`/upload?dataId=${encodeURIComponent(dataId)}`);
+	    const source = new EventSource(`/upload?dataId=${encodeURIComponent(dataId)}&cycle=${cycleCount}`);
 
         source.onmessage = function(event) {
             if (event.data.startsWith("progress:")) {
