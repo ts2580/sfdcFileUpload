@@ -1,3 +1,6 @@
+server:
+    port: 5432
+
 salesforce:
     clientId: ${SALESFORCE_CLIENT_ID}
     clientSecret: ${SALESFORCE_CLIENT_SECRET}
