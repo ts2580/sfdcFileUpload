@@ -25,7 +25,7 @@ public class FileController {
     final long MAX_TOTAL_BATCH_SIZE = 6_000_000L; // 최대 6MB
 
     @GetMapping("/upload")
-    public SseEmitter upload(@RequestParam String dataId, HttpSession session) {
+    public SseEmitter upload(@RequestParam String dataId, @RequestParam int cycle, HttpSession session) {
         SseEmitter emitter = new SseEmitter(0L);
         String accessToken = (String) session.getAttribute("accessToken");
 
@@ -180,8 +180,8 @@ public class FileController {
                         emitter.send(SseEmitter.event().data("progress:" + percent + "," + totalProcessed + "," + targetCnt));
                     }
 
-//                    loopCount++;
-//                    if (loopCount > 0) break;
+                    loopCount++;
+                    if (loopCount >= cycle) break;
                 }
 
                 emitter.send(SseEmitter.event().data("🎉 전체 완료 : 총 " + totalProcessed + "건 처리"));
