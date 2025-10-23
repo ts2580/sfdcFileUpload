@@ -6,9 +6,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sfdcupload.file.dto.ExcelFile;
+import lombok.RequiredArgsConstructor;
 import okhttp3.*;
 import okio.ByteString;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -16,10 +18,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-@SpringBootApplication
+@Service
+@RequiredArgsConstructor
 public class SalesforceFileUpload {
 
-    private final String myDomain = "https://yuricompany-dev-ed.develop.my.salesforce.com";
+    @Value("${salesforce.myDomain}")
+    private String myDomain;
 
     public boolean uploadFileViaConnectAPI(byte[] fileByte, String fileName, String recordId, String accessToken) throws Exception {
         /* ConnectAPI MultiPart의 특징 */
