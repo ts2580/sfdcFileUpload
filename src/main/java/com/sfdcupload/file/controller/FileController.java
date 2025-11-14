@@ -20,6 +20,8 @@ import java.util.List;
 public class FileController {
 
     private final FileService fileService;
+    private final SalesforceFileUpload salesforceFileUpload;
+
     // long을 쓰는 이유: int는 크기가 너무 작음. int는 21억bit. 대략 2GB
     final long MAX_SIZE_BYTES = 35_000_000L; // 최대 35MB
     final long MAX_TOTAL_BATCH_SIZE = 6_000_000L; // 최대 6MB
@@ -112,7 +114,7 @@ public class FileController {
                     if (!listBig.isEmpty()) {
                         try {
                             for (ExcelFile excelFile : listBig) {
-                                boolean result = new SalesforceFileUpload().uploadFileViaConnectAPI(
+                                boolean result = salesforceFileUpload.uploadFileViaConnectAPI(
                                     excelFile.getAppendFile(), excelFile.getBbsAttachFileName(), excelFile.getSfid(), accessToken
                                 );
 
@@ -132,7 +134,7 @@ public class FileController {
                     if (!listMedium.isEmpty()) {
                         try {
                             for (ExcelFile excelFile : listMedium) {
-                                boolean result = new SalesforceFileUpload().uploadFileViaContentVersionAPI(
+                                boolean result = salesforceFileUpload.uploadFileViaContentVersionAPI(
                                         excelFile.getAppendFile(), excelFile.getBbsAttachFileName(), excelFile.getSfid(), accessToken
                                 );
 
@@ -152,7 +154,7 @@ public class FileController {
                     if (!listSmallPrime.isEmpty()) {
                         for (List<ExcelFile> excelFiles : listSmallPrime) {
                             try {
-                                List<ExcelFile> listSuccess = new SalesforceFileUpload().uploadFileBatch(
+                                List<ExcelFile> listSuccess = salesforceFileUpload.uploadFileBatch(
                                         excelFiles, accessToken
                                 );
 
