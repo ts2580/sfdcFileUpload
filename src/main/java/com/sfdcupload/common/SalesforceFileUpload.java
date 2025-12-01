@@ -31,6 +31,8 @@ public class SalesforceFileUpload {
         // base64로 인코딩할 필요 없음
         // 하지만 시간당 2000 call 넘어가면 에러
 
+        ObjectMapper mapper = new ObjectMapper();
+
         // OkHttp로 변경
         OkHttpClient client = new OkHttpClient.Builder()
                 .callTimeout(600, TimeUnit.SECONDS)       // 전체 호출 시간 제한
@@ -40,24 +42,30 @@ public class SalesforceFileUpload {
                 .build();
 
         // OKHttp의 Multi Part 용 바디
-        RequestBody requestBody = RequestBody.create(
+        RequestBody fileBody  = RequestBody.create(
                 ByteString.of(fileByte),
                 MediaType.parse("application/octet-stream")
         );
 
-        // Post로 쏠 MultiPart 생성
-        MultipartBody.Builder multipartBuilder = new MultipartBody.Builder().setType(MultipartBody.FORM);
-        multipartBuilder.addFormDataPart("title", fileName);
-        multipartBuilder.addFormDataPart("fileData", fileName, requestBody);
+        Map<String, String> contentVersionMap = new HashMap<>();
+        contentVersionMap.put("firstPublishLocationId", recordId);
 
-        // OKHttp Request
-        Request uploadRequest = new Request.Builder()
-                .url(myDomain + "/services/data/v63.0/connect/files/users/me")
-                .addHeader("Authorization", "Bearer " + accessToken)
-                .post(multipartBuilder.build())
+        RequestBody jsonPart = generateRequestBody(contentVersionMap, mapper);
+
+        MultipartBody requestBody = new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                // fileData만 있으면 됨
+                .addFormDataPart("fileData", fileName, fileBody)
+                // Multipart 외 Json 부분은 따로 넣어줘야함
+                .addPart(Headers.of("Content-Disposition", "form-data; name=\"json\""), jsonPart)
                 .build();
 
-        // try-with-resource : 자동으로 Try 문이 끝나면 연결 종료. 자원관리해줌
+        Request uploadRequest = new Request.Builder()
+                .url(myDomain + "/services/data/v65.0/connect/files/users/me")
+                .addHeader("Authorization", "Bearer " + accessToken)
+                .post(requestBody)
+                .build();
+
         try (Response response = client.newCall(uploadRequest).execute()) {
 
             int statusCode = response.code();
@@ -69,44 +77,6 @@ public class SalesforceFileUpload {
                 System.out.println("업로드 에러 :: " + responseBody);
 
                 throw new Exception("파일 업로드 실패 ! ==> " + responseBody);
-            }
-
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode rootNode = mapper.readTree(responseBody); // 셀포의 Map<String, Object>랑 동일함
-            JsonNode idNode = rootNode.get("id");
-
-            if (idNode == null) throw new Exception("파일 업로드 응답에 ID가 없음.");
-
-            // 세일즈포스의 ContentDocument의 Id
-            String fileId = idNode.asText();
-
-            // ContentDocumentLink 만들기 위함
-            Map<String, String> mapContent = new HashMap<>();
-            mapContent.put("ContentDocumentId", fileId); // 파일 Id
-            mapContent.put("LinkedEntityId", recordId); // 연결할 레코드 Id
-            mapContent.put("ShareType", "V"); // View 권한, 수정권한은 C, 레코드의 권한 따라가는건 I
-
-
-            // Request Body 생성하기
-            RequestBody jsonRequestBody = generateRequestBody(mapContent, mapper);
-
-            // Multi Part의 경우 MultiPartBuilder에서 Content Type 지정해주면 되지만 대부분은 Header에 Content Type 지정
-            Request linkRequest = new Request.Builder()
-                    .url(myDomain + "/services/data/v63.0/sobjects/ContentDocumentLink/")
-                    .addHeader("Authorization", "Bearer " + accessToken)
-                    .addHeader("Content-Type", "application/json")
-                    .post(jsonRequestBody)
-                    .build();
-
-            // httpClient는 재사용함
-            try (Response linkResponse = client.newCall(linkRequest).execute()) {
-                int linkStatusCode = linkResponse.code();
-
-                if (linkStatusCode != 201 && linkStatusCode != 200) {
-                    System.out.println("파일은 올렸지만 연결 실패 ==> " + Objects.requireNonNull(linkResponse.body()).string());
-
-                    return false;
-                }
             }
 
             return true;

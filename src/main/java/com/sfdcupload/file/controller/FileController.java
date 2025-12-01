@@ -45,14 +45,14 @@ public class FileController {
                 int loopCount = 0;
                 int updateCnt = 0;
 
-                targetCnt = fileService.totalCafe();
+                targetCnt = fileService.totalAccFile();
 
                 emitter.send(SseEmitter.event().data("progress: 0" + "," + totalProcessed + "," + targetCnt));
 
                 while (true) {
 
                     // isMig가 0인 애들만 찾기
-                    List<ExcelFile> listExcelFile = fileService.findCafe();
+                    List<ExcelFile> listExcelFile = fileService.findAccFile();
 
                     if (listExcelFile.isEmpty()) {
                         emitter.send(SseEmitter.event().data("✅ 더 이상 처리할 항목이 없습니다"));
@@ -174,7 +174,7 @@ public class FileController {
 
 
                     if (!listSuccessAll.isEmpty()) {
-                        updateCnt = fileService.updateCafe(listSuccessAll);
+                        updateCnt = fileService.updateAccFile(listSuccessAll);
                         totalProcessed += updateCnt;
                         emitter.send(SseEmitter.event().data("✔ " + updateCnt + "건 DB 반영 완료"));
 
