@@ -9,15 +9,7 @@ import java.util.Map;
 @Mapper
 public interface FileRepository {
 
-    int totalCafe();
-    List<ExcelFile> findCafe();
-    int updateCafe(Map<String, Object> listCafe);
-
-    int totalExport();
-    List<ExcelFile> findExport();
-    int updateExport(Map<String, Object> listCert);
-
-    int totalClaim();
-    List<ExcelFile> findClaim();
-    int updateClaim(Map<String, Object> listClaim);
+    int totalAccFile();
+    List<ExcelFile> findAccFile();
+    int updateAccFile(Map<String, Object> listCafe);
 }
