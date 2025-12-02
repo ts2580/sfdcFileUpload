@@ -11,5 +11,5 @@ public interface FileRepository {
 
     int totalAccFile();
     List<ExcelFile> findAccFile();
-    int updateAccFile(Map<String, Object> listCafe);
+    int updateAccFile(Map<String, Object> listFile);
 }
