@@ -7,5 +7,5 @@ import java.util.List;
 public interface FileService {
     int totalAccFile();
     List<ExcelFile> findAccFile();
-    int updateAccFile(List<ExcelFile> listCafe);
+    int updateAccFile(List<ExcelFile> listFile);
 }

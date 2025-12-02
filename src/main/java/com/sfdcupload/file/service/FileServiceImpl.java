@@ -12,22 +12,22 @@ import java.util.*;
 public class FileServiceImpl implements FileService {
     private final FileRepository fileRepository;
 
-    public int totalCafe(){
+    public int totalAccFile(){
         return fileRepository.totalAccFile();
     }
 
     @Override
-    public List<ExcelFile> findCafe() {
+    public List<ExcelFile> findAccFile() {
         return fileRepository.findAccFile();
     }
 
     @Override
-    public int updateCafe(List<ExcelFile> listCafe){
+    public int updateAccFile(List<ExcelFile> listFile){
 
-        Map<String, Object> mapCafe = new HashMap<>();
-        mapCafe.put("listCafe", listCafe);
+        Map<String, Object> mapFile = new HashMap<>();
+        mapFile.put("listFile", listFile);
 
-        return fileRepository.updateAccFile(mapCafe);
+        return fileRepository.updateAccFile(mapFile);
     }
 
 
