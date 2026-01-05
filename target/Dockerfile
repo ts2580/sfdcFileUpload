@@ -1,5 +1,5 @@
-FROM openjdk:17
+FROM eclipse-temurin:17-jre
 ARG JAR_FILE=*.jar
 COPY ${JAR_FILE} yuri.jar
-EXPOSE 5432
+EXPOSE 443
 ENTRYPOINT ["java","-jar","yuri.jar"]
