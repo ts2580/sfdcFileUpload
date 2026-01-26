@@ -3,14 +3,21 @@ package com.sfdcupload.file.controller;
 import com.sfdcupload.common.SalesforceFileUpload;
 import com.sfdcupload.file.dto.ExcelFile;
 import com.sfdcupload.file.service.FileService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +32,52 @@ public class FileController {
     // long을 쓰는 이유: int는 크기가 너무 작음. int는 21억bit. 대략 2GB
     final long MAX_SIZE_BYTES = 35_000_000L; // 최대 35MB
     final long MAX_TOTAL_BATCH_SIZE = 6_000_000L; // 최대 6MB
+
+    // File 저장할 EFS Mount 경로
+    private static final Path EFS_ROOT = Paths.get("/mnt/efs/sfdc");
+
+    // 관통 테스트 용 메소드
+    @GetMapping("/ping")
+    public String ping() {
+        return "pong!";
+    }
+
+    // 파일을 받기 위한 메소드. Byte Stream을 받아서 파일로 저장
+    @PutMapping("/uploadEFS")
+    public ResponseEntity<String> uploadFile(HttpServletRequest request,
+                                             @RequestHeader("X-Filename") String encodedFileName) {
+        try {
+            // 디렉터리 없으면 생성
+            Files.createDirectories(EFS_ROOT);
+            System.out.println("encodedFileName :: " + encodedFileName);
+            // 헤더에서 파일명 복원
+            String fileName = java.net.URLDecoder.decode(
+                    encodedFileName,
+                    java.nio.charset.StandardCharsets.UTF_8
+            );
+            // 디렉터리 traversal 방지
+            String safeFileName = Paths.get(fileName).getFileName().toString();
+            Path targetPath = EFS_ROOT.resolve(safeFileName);
+            // 스트림을 그대로 파일에 복사 (용량 제한 없음)
+            try (InputStream in = request.getInputStream();
+                 OutputStream out = Files.newOutputStream(
+                         targetPath,
+                         StandardOpenOption.CREATE,
+                         StandardOpenOption.TRUNCATE_EXISTING
+                 )) {
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, len);
+                }
+            }
+            return ResponseEntity.ok("OK");
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("File upload failed.");
+        }
+    }
 
     @GetMapping("/upload")
     public SseEmitter upload(@RequestParam String dataId, @RequestParam int cycle, HttpSession session) {

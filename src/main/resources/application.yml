@@ -1,5 +1,11 @@
 server:
-    port: 5432
+    port: 443
+    ssl:
+      enabled: true
+      key-store: ${KEY_STORE}   # keystore 위치
+      key-store-password: ${KEY_STORE_PASSWORD} # 설정한 비번
+      key-store-type: ${KEY_STORE_TYPE}
+      key-alias: ${KEY_ALIAS}
 
 salesforce:
     clientId: ${SALESFORCE_CLIENT_ID}
